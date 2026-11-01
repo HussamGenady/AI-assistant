@@ -1,0 +1,97 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: enterprise-ai-assistant
+  threads:
+    virtual:
+      enabled: true
+
+  ai:
+    # ---------------------------------------------------------------- OpenAI
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+          temperature: 0.2
+      embedding:
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+
+    # ---------------------------------------------------------------- Qdrant (gRPC port 6334)
+    # These properties configure the shared QdrantClient bean. The collections
+    # actually used (semantic cache + chat memory) are defined under `app.*`.
+    vectorstore:
+      qdrant:
+        host: ${QDRANT_HOST:localhost}
+        port: ${QDRANT_GRPC_PORT:6334}
+        use-tls: ${QDRANT_TLS:false}
+        # api-key: ${QDRANT_API_KEY}        # uncomment for Qdrant Cloud / secured clusters
+        initialize-schema: false
+
+    # ---------------------------------------------------------------- MCP client
+    mcp:
+      client:
+        enabled: true
+        name: enterprise-mcp-client
+        version: 1.0.0
+        type: SYNC
+        request-timeout: 30s
+        toolcallback:
+          enabled: true
+        # (1) STDIO servers from a Claude-Desktop-style JSON file (docker-run filesystem server).
+        #     Override with MCP_SERVERS_FILE=file:/abs/path/mcp-servers.json to keep local paths out of the jar.
+        stdio:
+          servers-configuration: ${MCP_SERVERS_FILE:classpath:mcp-servers.json}
+        # (2) Streamable-HTTP server (uncomment and point at your server)
+        # streamable-http:
+        #   connections:
+        #     remote-tools:
+        #       url: ${MCP_REMOTE_URL:http://localhost:8081}
+        #       endpoint: /mcp
+        # (3) Legacy SSE server
+        # sse:
+        #   connections:
+        #     legacy-tools:
+        #       url: ${MCP_SSE_URL:http://localhost:8082}
+        #       sse-endpoint: /sse
+
+# -------------------------------------------------------------------- Custom app settings
+app:
+  semantic-cache:
+    enabled: true
+    collection: semantic_cache
+    similarity-threshold: 0.92
+    ttl: 6h                    # entries older than this are ignored on lookup
+    cache-follow-ups: false    # follow-up turns depend on history -> bypass cache by default
+  memory:
+    collection: chat_memory
+    max-messages: 20           # sliding window sent to the model
+  tavily:
+    api-key: ${TAVILY_API_KEY}
+    base-url: https://api.tavily.com
+    search-depth: basic        # basic | advanced
+    max-results: 5
+    max-content-chars: 800
+    connect-timeout: 3s
+    read-timeout: 15s
+  guardrails:
+    max-prompt-chars: 8000
+    blocked-patterns:
+      - '(?i)ignore (all )?(previous|prior) instructions'
+      - 'sk-[A-Za-z0-9]{20,}'
+      - '\b\d{3}-\d{2}-\d{4}\b'
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+logging:
+  level:
+    com.enterprise.ai: INFO
+    # org.springframework.ai.chat.client.advisor: DEBUG
